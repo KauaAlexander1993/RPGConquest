@@ -1,0 +1,6 @@
+{
+  "name": "Chronicles AI - RPG Master Engine & API",
+  "description": "API independente de IA para RPG com histórias infinitas, geração procedural de cenários e mestre interativo sem final determinado.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
