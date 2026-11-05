@@ -13,4 +13,4 @@ export const ai = new GoogleGenAI({
   },
 });
 
-export const RPG_MODEL = 'gemini-3.8-flash';
+export const RPG_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';

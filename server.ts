@@ -3,14 +3,15 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { rpgRouter } from './server/rpgRouter.js';
-
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+
 async function startServer() {
+  const { rpgRouter } = await import('./server/rpgRouter.js');
+
   const app = express();
   const PORT = process.env.PORT || 3000;
 

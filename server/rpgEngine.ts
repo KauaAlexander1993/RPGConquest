@@ -334,6 +334,7 @@ Responda EXCLUSIVAMENTE em formato JSON com esta estrutura:
       const campaign: Campaign = {
         id,
         title: req.title || parsed.title || 'A Saga Interminável',
+        narrationMode: 'ai',
         theme,
         customThemePrompt: req.customThemePrompt,
         tone,
@@ -378,6 +379,7 @@ Responda EXCLUSIVAMENTE em formato JSON com esta estrutura:
     const fallbackCamp: Campaign = {
       id,
       title: req.title || 'Crônicas do Andarilho Imortal',
+      narrationMode: 'offline',
       theme: req.theme || 'dark_fantasy',
       customThemePrompt: req.customThemePrompt,
       tone: req.tone || 'gritty',
@@ -550,6 +552,7 @@ Responda EXCLUSIVAMENTE em formato JSON com esta estrutura:
 
     const prompt = `
 Você é o Mestre de RPG da campanha "${campaign.title}" (${campaign.theme}, tom: ${campaign.tone}, idioma: ${campaign.language}).
+${campaign.customThemePrompt ? `PREMISSA E REGRAS DO MODO DE CAMPANHA:\n${campaign.customThemePrompt}` : ''}
 
 SITUAÇÃO ATUAL DO MUNDO:
 - Cenário atual: "${campaign.currentScenario.name}" (${campaign.currentScenario.region})
@@ -766,6 +769,7 @@ RESPONDA EXCLUSIVAMENTE EM JSON VÁLIDO COM A SEGUINTE ESTRUTURA:
         consequencesSummary: hpDelta !== 0 || itemsGainedList.length > 0 ? `HP: ${hpDelta > 0 ? `+${hpDelta}` : hpDelta} | XP: +${xpGained}` : undefined,
       };
 
+      campaign.narrationMode = 'ai';
       campaign.history.push(historyEntry);
       campaign.turnCount = turnNumber;
       campaign.updatedAt = new Date().toISOString();
@@ -804,8 +808,51 @@ RESPONDA EXCLUSIVAMENTE EM JSON VÁLIDO COM A SEGUINTE ESTRUTURA:
   private static processFallbackTurn(campaign: Campaign, req: TurnRequest, diceResult: any) {
     const turnNumber = campaign.turnCount + 1;
     const playerAction = req.action || 'Avançar com cautela';
+    const className = campaign.character.class.toLocaleLowerCase('pt-BR');
+    const normalizedAction = playerAction.toLocaleLowerCase('pt-BR');
+    let classFocus = '';
+    let hpDelta = 0;
+    let xpGained = 20;
 
-    const narrative = `O vento uiva através das frestas do ambiente enquanto sua ação ("${playerAction}") repercute pelo ar. Seus instintos como ${campaign.character.class} mantêm seus pés firmes. Novas sombras se alongam nas paredes rochosas, e um brilho tênue parece indicar que há caminhos mais profundos ainda não descobertos. A aventura não cessa; o horizonte convida a um novo passo.`;
+    if (className.includes('necromante') && /atac|combate|defend|proteg|luta/.test(normalizedAction)) {
+      classFocus = 'Seus esqueletos avançam à frente, prendendo a ameaça por tempo suficiente para abrir uma brecha.';
+      xpGained += 5;
+    } else if (className.includes('rei demônio') && /intimid|comand|negoci|ameaç|convoc/.test(normalizedAction)) {
+      classFocus = 'Sua autoridade infernal pesa sobre a cena; as criaturas menores hesitam diante de você.';
+      xpGained += 5;
+    } else if (className.includes('herói lendário') && /prote|ajud|aliad|companheir/.test(normalizedAction)) {
+      classFocus = 'Sua coragem inspira quem luta ao seu lado, e a pessoa que você protege encontra forças para continuar.';
+      xpGained += 5;
+    } else if (className.includes('santa') && /cur|trat|rez|oraç|abenço|proteger/.test(normalizedAction)) {
+      hpDelta = 6;
+      classFocus = 'Uma luz serena envolve você e seus aliados; sua bênção restaura 6 pontos de vida.';
+    } else if (className.includes('rei dragão') && /atac|combate|fogo|dragão|intimid/.test(normalizedAction)) {
+      classFocus = 'Um sopro dracônico rompe o ar e força seus adversários a recuar, revelando uma nova abertura.';
+      xpGained += 5;
+    } else if (className.includes('guerreiro') && /atac|golpe|combate|luta|defend/.test(normalizedAction)) {
+      classFocus = 'Seu treino marcial transforma o movimento em uma manobra precisa e abre a guarda do oponente.';
+      xpGained += 3;
+    } else if (className.includes('maga') && /magia|feiti|arcano|runa|conjur/.test(normalizedAction)) {
+      classFocus = 'As linhas arcanas respondem ao seu gesto e tornam o efeito mais claro e controlável.';
+      xpGained += 3;
+    } else if (className.includes('ladino') && /furtiv|esgueir|escond|invad|tranca|armadilha/.test(normalizedAction)) {
+      classFocus = 'Você encontra uma passagem discreta e evita deixar sinais fáceis de seguir.';
+      xpGained += 3;
+    } else if (className.includes('bardo') && /convers|negoci|persuad|inspir|discurso|canç/.test(normalizedAction)) {
+      classFocus = 'Sua presença muda o tom da conversa e conquista a atenção de quem estava hesitante.';
+      xpGained += 3;
+    } else if (className.includes('patrulheiro') && /rastro|explor|trilha|rast|observ|investig/.test(normalizedAction)) {
+      classFocus = 'Seu olhar treinado identifica rastros e perigos que passariam despercebidos.';
+      xpGained += 3;
+    } else if (className.includes('sacerdote') && /cur|trat|rez|oraç|abenço|maldiç/.test(normalizedAction)) {
+      hpDelta = 4;
+      classFocus = 'Sua prece dissipa parte do mal-estar e restaura 4 pontos de vida.';
+    }
+
+    const previousHp = campaign.character.hp;
+    campaign.character.hp = Math.min(campaign.character.maxHp, campaign.character.hp + hpDelta);
+    hpDelta = campaign.character.hp - previousHp;
+    const narrative = `O vento uiva através das frestas do ambiente enquanto sua ação ("${playerAction}") repercute pelo ar. Seus instintos como ${campaign.character.class} mantêm seus pés firmes. ${classFocus ? `${classFocus} ` : ''}Novas sombras se alongam nas paredes rochosas, e um brilho tênue parece indicar que há caminhos mais profundos ainda não descobertos. A aventura não cessa; o horizonte convida a um novo passo.`;
 
     const historyEntry: TurnHistoryEntry = {
       id: generateId('turn'),
@@ -815,10 +862,11 @@ RESPONDA EXCLUSIVAMENTE EM JSON VÁLIDO COM A SEGUINTE ESTRUTURA:
       gmNarrative: narrative,
       scenarioName: campaign.currentScenario.name,
       timestamp: new Date().toISOString(),
-      consequencesSummary: 'XP: +20',
+      consequencesSummary: `${hpDelta ? `HP: +${hpDelta} | ` : ''}XP: +${xpGained}`,
     };
 
-    campaign.character.xp += 20;
+    campaign.narrationMode = 'offline';
+    campaign.character.xp += xpGained;
     campaign.history.push(historyEntry);
     campaign.turnCount = turnNumber;
     campaign.updatedAt = new Date().toISOString();
@@ -852,9 +900,9 @@ RESPONDA EXCLUSIVAMENTE EM JSON VÁLIDO COM A SEGUINTE ESTRUTURA:
           },
         ] as SuggestedAction[],
         characterDeltas: {
-          hpDelta: 0,
+          hpDelta,
           manaDelta: 0,
-          xpGained: 20,
+          xpGained,
           itemsGained: [],
           itemsLost: [],
           newStatusEffects: [],

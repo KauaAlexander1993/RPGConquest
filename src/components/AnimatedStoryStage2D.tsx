@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { CharacterAvatar2D, VisualCharacterConfig, DEFAULT_AVATAR } from './CharacterAvatar2D';
 import { Volume2, VolumeX, Swords, Wand2, Shield, Sparkles } from 'lucide-react';
 import { soundFX } from '../utils/soundEffects';
@@ -14,7 +14,7 @@ interface StoryStageProps {
   onActionClick?: (action: string) => void;
 }
 
-export const AnimatedStoryStage2D: React.FC<StoryStageProps> = ({
+export const AnimatedStoryStage2D: FC<StoryStageProps> = ({
   scene = 'floresta',
   worldName = 'Fantasia medieval',
   characterConfig = DEFAULT_AVATAR,
@@ -37,26 +37,34 @@ export const AnimatedStoryStage2D: React.FC<StoryStageProps> = ({
       opacity: 0.3 + Math.random() * 0.7,
     }));
     setParticles(list);
-    // Smooth atmospheric transition sound
-    soundFX.playAmbientTransition(scene);
+    // Audio support can be restricted by browser autoplay policies.
+    try {
+      soundFX.playAmbientTransition(scene);
+    } catch (error) {
+      console.warn('[AnimatedStoryStage2D] Ambient audio unavailable:', error);
+    }
   }, [scene]);
 
   // Trigger visual slash/magic/shield FX when action changes
   useEffect(() => {
     if (!lastAction) return;
     const lower = lastAction.toLowerCase();
-    if (lower.includes('atac') || lower.includes('golp') || lower.includes('espada') || lower.includes('lut')) {
-      setActionEffect('slash');
-      soundFX.playSwordClash();
-      setTimeout(() => setActionEffect(null), 800);
-    } else if (lower.includes('magia') || lower.includes('feiti') || lower.includes('arcano') || lower.includes('poder')) {
-      setActionEffect('magic');
-      soundFX.playMagic();
-      setTimeout(() => setActionEffect(null), 1000);
-    } else if (lower.includes('defend') || lower.includes('escudo') || lower.includes('guard')) {
-      setActionEffect('shield');
-      soundFX.playHeavyImpact();
-      setTimeout(() => setActionEffect(null), 800);
+    try {
+      if (lower.includes('atac') || lower.includes('golp') || lower.includes('espada') || lower.includes('lut')) {
+        setActionEffect('slash');
+        soundFX.playSwordClash();
+        setTimeout(() => setActionEffect(null), 800);
+      } else if (lower.includes('magia') || lower.includes('feiti') || lower.includes('arcano') || lower.includes('poder')) {
+        setActionEffect('magic');
+        soundFX.playMagic();
+        setTimeout(() => setActionEffect(null), 1000);
+      } else if (lower.includes('defend') || lower.includes('escudo') || lower.includes('guard')) {
+        setActionEffect('shield');
+        soundFX.playHeavyImpact();
+        setTimeout(() => setActionEffect(null), 800);
+      }
+    } catch (error) {
+      console.warn('[AnimatedStoryStage2D] Action audio unavailable:', error);
     }
   }, [lastAction]);
 
@@ -227,7 +235,7 @@ export const AnimatedStoryStage2D: React.FC<StoryStageProps> = ({
 };
 
 // 2D Monster Sprite Renderer
-const MonsterSprite2D: React.FC<{ type: string }> = ({ type }) => {
+const MonsterSprite2D: FC<{ type: string }> = ({ type }) => {
   const t = type.toLowerCase();
   if (t.includes('dragao') || t.includes('dragão')) {
     return (
@@ -281,7 +289,7 @@ const MonsterSprite2D: React.FC<{ type: string }> = ({ type }) => {
 };
 
 // 2D NPC Sprite Renderer
-const NpcSprite2D: React.FC<{ type: string }> = ({ type }) => {
+const NpcSprite2D: FC<{ type: string }> = ({ type }) => {
   const t = type.toLowerCase();
   const cloakColor = t.includes('sabio') ? '#1e3a8a' : (t.includes('guarda') ? '#475569' : '#854d0e');
   return (

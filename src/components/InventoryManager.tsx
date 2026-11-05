@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { 
   Shield, 
   Swords, 
@@ -113,7 +113,7 @@ interface InventoryManagerProps {
   onUseItemInNarrative?: (actionNarrative: string, item: GameItem) => void;
 }
 
-export const InventoryManager: React.FC<InventoryManagerProps> = ({ 
+export const InventoryManager: FC<InventoryManagerProps> = ({
   onBackToGame, 
   onUseItemInNarrative 
 }) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { 
   Scroll, 
   CheckCircle2, 
@@ -106,7 +106,7 @@ interface QuestJournalProps {
   onBackToGame?: () => void;
 }
 
-export const QuestJournal: React.FC<QuestJournalProps> = ({ onBackToGame }) => {
+export const QuestJournal: FC<QuestJournalProps> = ({ onBackToGame }) => {
   const [quests, setQuests] = useState<QuestItem[]>(() => {
     try {
       const saved = localStorage.getItem('forje_quest_journal');

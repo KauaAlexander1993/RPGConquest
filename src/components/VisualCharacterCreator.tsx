@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FC } from 'react';
 import { 
   CharacterAvatar2D, 
   VisualCharacterConfig, 
@@ -20,7 +20,7 @@ interface VisualCreatorProps {
   onCancel?: () => void;
 }
 
-export const VisualCharacterCreator: React.FC<VisualCreatorProps> = ({
+export const VisualCharacterCreator: FC<VisualCreatorProps> = ({
   initialConfig = DEFAULT_AVATAR,
   onSave,
   onCancel,

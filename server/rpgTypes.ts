@@ -96,6 +96,7 @@ export interface TurnHistoryEntry {
 export interface Campaign {
   id: string;
   title: string;
+  narrationMode?: 'ai' | 'offline';
   theme: RPGTheme;
   customThemePrompt?: string;
   tone: 'epic' | 'gritty' | 'mysterious' | 'tactical';

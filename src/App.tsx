@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ForjeSuaLenda } from './components/ForjeSuaLenda';
 import { ApiExplorer } from './components/ApiExplorer';
 import { ScenarioGenerator } from './components/ScenarioGenerator';
@@ -180,7 +180,7 @@ export default function App() {
 
             <div className="hidden lg:flex items-center gap-2 text-xs font-sans text-[#9a927e]">
               <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span>Gemini 3.8 Flash</span>
+              <span>Gemini Flash</span>
             </div>
           </div>
         </div>

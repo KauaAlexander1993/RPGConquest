@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState, type FC } from 'react';
 import { Compass, RefreshCw, Sparkles, MapPin, ShieldAlert, Users, CloudRain } from 'lucide-react';
 
-export const ScenarioGenerator: React.FC = () => {
+export const ScenarioGenerator: FC = () => {
   const [theme, setTheme] = useState('dark_fantasy');
   const [travelIntent, setTravelIntent] = useState('Explorar ruínas submersas nas profundezas');
   const [explorationType, setExplorationType] = useState<'travel' | 'dungeon_depths' | 'secret_portal' | 'strange_anomaly'>('travel');
