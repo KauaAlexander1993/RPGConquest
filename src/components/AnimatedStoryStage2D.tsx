@@ -53,15 +53,18 @@ export const AnimatedStoryStage2D: FC<StoryStageProps> = ({
       if (lower.includes('atac') || lower.includes('golp') || lower.includes('espada') || lower.includes('lut')) {
         setActionEffect('slash');
         soundFX.playSwordClash();
-        setTimeout(() => setActionEffect(null), 800);
+        const timer = window.setTimeout(() => setActionEffect(null), 850);
+        return () => window.clearTimeout(timer);
       } else if (lower.includes('magia') || lower.includes('feiti') || lower.includes('arcano') || lower.includes('poder')) {
         setActionEffect('magic');
         soundFX.playMagic();
-        setTimeout(() => setActionEffect(null), 1000);
+        const timer = window.setTimeout(() => setActionEffect(null), 1100);
+        return () => window.clearTimeout(timer);
       } else if (lower.includes('defend') || lower.includes('escudo') || lower.includes('guard')) {
         setActionEffect('shield');
         soundFX.playHeavyImpact();
-        setTimeout(() => setActionEffect(null), 800);
+        const timer = window.setTimeout(() => setActionEffect(null), 850);
+        return () => window.clearTimeout(timer);
       }
     } catch (error) {
       console.warn('[AnimatedStoryStage2D] Action audio unavailable:', error);
@@ -98,7 +101,7 @@ export const AnimatedStoryStage2D: FC<StoryStageProps> = ({
   const palette = getScenePalette();
 
   return (
-    <div className="relative w-full h-64 md:h-72 rounded-2xl overflow-hidden border border-[#3a3626] bg-[#0b0d0c] shadow-2xl select-none mb-4">
+    <div className={`story-stage story-stage--${actionEffect || 'idle'} relative w-full h-64 md:h-72 rounded-2xl overflow-hidden border border-[#3a3626] bg-[#0b0d0c] shadow-2xl select-none mb-4`}>
       {/* Sky & Horizon Gradient */}
       <div
         className="absolute inset-0 transition-colors duration-1000"
@@ -154,7 +157,7 @@ export const AnimatedStoryStage2D: FC<StoryStageProps> = ({
       {/* Stage Characters: Hero on Left, Adversary/NPC on Right */}
       <div className="absolute inset-0 flex justify-between items-end px-6 md:px-16 pb-3 pointer-events-none">
         {/* Left: Player's Customized Character */}
-        <div className="relative pointer-events-auto transform transition-transform hover:scale-105">
+        <div className={`story-hero relative pointer-events-auto transform transition-transform hover:scale-105 ${actionEffect ? `story-hero--${actionEffect}` : ''}`}>
           {/* Hero Name Badge */}
           <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded bg-black/75 border border-[#e8c46a66] text-[11px] font-serif text-[#e8c46a] whitespace-nowrap shadow-md">
             Você (Herói)
@@ -170,7 +173,7 @@ export const AnimatedStoryStage2D: FC<StoryStageProps> = ({
         </div>
 
         {/* Right: Encountered Monster or NPC */}
-        <div className="relative pointer-events-auto transform transition-transform hover:scale-105">
+        <div className={`story-opponent relative pointer-events-auto transform transition-transform hover:scale-105 ${actionEffect ? `story-opponent--${actionEffect}` : ''}`}>
           {criatura ? (
             <div className="flex flex-col items-center">
               <div className="px-2.5 py-0.5 mb-1 rounded bg-red-950/80 border border-red-500/50 text-[11px] font-serif text-red-300 font-bold tracking-wider shadow-md uppercase">
@@ -202,13 +205,21 @@ export const AnimatedStoryStage2D: FC<StoryStageProps> = ({
 
       {/* Visual FX Overlay (Slash streaks, magic burst, shield) */}
       {actionEffect === 'slash' && (
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="w-96 h-2 bg-gradient-to-r from-transparent via-white to-transparent rotate-45 shadow-[0_0_25px_8px_#ffffff] animate-ping" />
+        <div className="anime-impact anime-impact--slash absolute inset-0 pointer-events-none" aria-hidden="true">
+          <span />
+          <span />
+          <span />
         </div>
       )}
       {actionEffect === 'magic' && (
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="w-48 h-48 rounded-full border-4 border-cyan-400 shadow-[0_0_40px_10px_#06b6d4] animate-ping opacity-75" />
+        <div className="anime-impact anime-impact--magic absolute inset-0 pointer-events-none" aria-hidden="true">
+          <span />
+          <span />
+        </div>
+      )}
+      {actionEffect === 'shield' && (
+        <div className="anime-impact anime-impact--shield absolute inset-0 pointer-events-none" aria-hidden="true">
+          <span />
         </div>
       )}
 

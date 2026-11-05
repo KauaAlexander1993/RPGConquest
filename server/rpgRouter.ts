@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ai, RPG_MODEL } from './geminiClient.js';
 import { RPGEngine } from './rpgEngine.js';
+import { campaignDatabaseEnabled } from './database.js';
 
 export const rpgRouter = Router();
 
@@ -11,6 +12,7 @@ rpgRouter.get('/health', (_req: Request, res: Response) => {
     service: 'Chronicles RPG AI Engine & Master API',
     model: RPG_MODEL,
     hasApiKey: Boolean(process.env.GEMINI_API_KEY),
+    persistentCampaigns: campaignDatabaseEnabled,
     timestamp: new Date().toISOString(),
   });
 });
@@ -37,7 +39,7 @@ REGRAS DE OURO DO MESTRE:
 6. O JOGADOR É O PROTAGONISTA: respeite classe, atributos e passado.
 7. NUNCA encerre a campanha por morte: se hp chegar a 0, narre a queda e uma reviravolta dramática (capturado, resgatado com uma dívida) e devolva o herói à ação com pelo menos 6-8 hp.
 8. DADOS: se houver d20 informado, respeite o resultado (1 = falha dramática, 2-9 = custo, 10-19 = sucesso, 20 = crítico épico).
-9. Seja conciso: 2 a 4 parágrafos curtos por turno (até 170 palavras).
+9. Narre cada turno em 2 a 4 parágrafos envolventes, com cerca de 120 a 200 palavras. Use frases completas, ritmo natural e detalhes que façam a história avançar; evite fragmentos telegráficos.
 10. Responda ESTRITAMENTE em formato JSON com campos válidos.
 `;
 
@@ -77,9 +79,9 @@ REGRAS DE OURO DO MESTRE:
 });
 
 // List all active campaigns
-rpgRouter.get('/campaigns', (_req: Request, res: Response) => {
+rpgRouter.get('/campaigns', async (_req: Request, res: Response) => {
   try {
-    const list = RPGEngine.listCampaigns();
+    const list = await RPGEngine.listCampaigns();
     res.json({ campaigns: list });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -87,9 +89,9 @@ rpgRouter.get('/campaigns', (_req: Request, res: Response) => {
 });
 
 // Get a single campaign with full history
-rpgRouter.get('/campaign/:id', (req: Request, res: Response) => {
+rpgRouter.get('/campaign/:id', async (req: Request, res: Response) => {
   try {
-    const campaign = RPGEngine.getCampaign(req.params.id);
+    const campaign = await RPGEngine.getCampaign(req.params.id);
     if (!campaign) {
       return res.status(404).json({ error: `Campanha com ID '${req.params.id}' não foi encontrada.` });
     }
@@ -114,15 +116,58 @@ rpgRouter.post('/campaign/new', async (req: Request, res: Response) => {
 });
 
 // Process a turn in a campaign
+rpgRouter.post('/turn/stream', async (req: Request, res: Response) => {
+  const { campaignId, action, customDiceRoll, playerMemory } = req.body;
+  if (!campaignId) {
+    return res.status(400).json({ error: 'campaignId é obrigatório' });
+  }
+
+  res.status(200).set({
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+  const sendEvent = (event: string, data: unknown) => {
+    if (!res.destroyed) res.write(`data: ${JSON.stringify({ event, data })}\n\n`);
+  };
+
+  try {
+    const result = await RPGEngine.processTurn({
+      campaignId,
+      action: action || 'Observar os arredores',
+      playerMemory: typeof playerMemory === 'string' ? playerMemory.slice(0, 1200) : undefined,
+      customDiceRoll,
+    }, (text) => sendEvent('narrative', { text }));
+    const latestTurn = result.campaign.history.at(-1);
+    sendEvent('complete', {
+      ...result,
+      campaign: {
+        ...result.campaign,
+        history: latestTurn ? [latestTurn] : [],
+      },
+    });
+  } catch (error) {
+    console.error('[rpgRouter /turn/stream] Erro:', error);
+    sendEvent('error', {
+      error: error instanceof Error ? error.message : 'Erro ao processar o turno.',
+    });
+  } finally {
+    res.end();
+  }
+});
+
 rpgRouter.post('/turn', async (req: Request, res: Response) => {
   try {
-    const { campaignId, action, customDiceRoll } = req.body;
+    const { campaignId, action, customDiceRoll, playerMemory } = req.body;
     if (!campaignId) {
       return res.status(400).json({ error: 'campaignId é obrigatório' });
     }
     const result = await RPGEngine.processTurn({
       campaignId,
       action: action || 'Observar os arredores',
+      playerMemory: typeof playerMemory === 'string' ? playerMemory.slice(0, 1200) : undefined,
       customDiceRoll,
     });
     res.json(result);
@@ -153,9 +198,9 @@ rpgRouter.post('/scenario/generate', async (req: Request, res: Response) => {
 });
 
 // Virtual dice roller with GM check evaluation
-rpgRouter.post('/dice/roll', (req: Request, res: Response) => {
+rpgRouter.post('/dice/roll', async (req: Request, res: Response) => {
   try {
-    const result = RPGEngine.rollDice(req.body);
+    const result = await RPGEngine.rollDice(req.body);
     res.json(result);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -163,9 +208,9 @@ rpgRouter.post('/dice/roll', (req: Request, res: Response) => {
 });
 
 // Delete a campaign
-rpgRouter.delete('/campaign/:id', (req: Request, res: Response) => {
+rpgRouter.delete('/campaign/:id', async (req: Request, res: Response) => {
   try {
-    const deleted = RPGEngine.deleteCampaign(req.params.id);
+    const deleted = await RPGEngine.deleteCampaign(req.params.id);
     if (!deleted) {
       return res.status(404).json({ error: 'Campanha não encontrada para exclusão.' });
     }
@@ -271,6 +316,44 @@ rpgRouter.get('/openapi.json', (_req: Request, res: Response) => {
             },
           },
           responses: { 200: { description: 'Turno resolvido com desfecho e novo cenário' } },
+        },
+      },
+      '/turn/stream': {
+        post: {
+          summary: 'Processa um turno e transmite a narrativa enquanto é gerada',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    campaignId: { type: 'string' },
+                    action: { type: 'string' },
+                    playerMemory: { type: 'string' },
+                    customDiceRoll: {
+                      type: 'object',
+                      properties: {
+                        roll: { type: 'integer', minimum: 1, maximum: 20 },
+                        attribute: { type: 'string' },
+                      },
+                    },
+                  },
+                  required: ['campaignId', 'action'],
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: 'Eventos SSE com trechos da narrativa e o resultado final do turno',
+              content: {
+                'text/event-stream': {
+                  schema: { type: 'string' },
+                },
+              },
+            },
+          },
         },
       },
       '/scenario/generate': {

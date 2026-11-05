@@ -1,16 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ForjeSuaLenda } from './components/ForjeSuaLenda';
 import { ApiExplorer } from './components/ApiExplorer';
 import { ScenarioGenerator } from './components/ScenarioGenerator';
 import { VisualCharacterCreator } from './components/VisualCharacterCreator';
 import { QuestJournal } from './components/QuestJournal';
-import { InventoryManager, GameItem } from './components/InventoryManager';
+import { InventoryManager } from './components/InventoryManager';
 import { VisualCharacterConfig, DEFAULT_AVATAR } from './components/CharacterAvatar2D';
-import { Swords, Code2, Compass, Palette, Scroll, Package, Volume2, VolumeX, Sparkles } from 'lucide-react';
+import { Backpack, Code2, Compass, House, Palette, ScrollText, Volume2, VolumeX, Sparkles, type LucideIcon } from 'lucide-react';
 import { soundFX } from './utils/soundEffects';
 
+type ActiveTab = 'game' | 'creator' | 'quests' | 'inventory' | 'api' | 'scenarios';
+
+const navigationItems: Array<{ id: ActiveTab; label: string; icon: LucideIcon }> = [
+  { id: 'game', label: 'Aventura', icon: House },
+  { id: 'creator', label: 'Herói', icon: Palette },
+  { id: 'quests', label: 'Missões', icon: ScrollText },
+  { id: 'inventory', label: 'Mochila', icon: Backpack },
+  { id: 'api', label: 'API', icon: Code2 },
+  { id: 'scenarios', label: 'Mundos', icon: Compass },
+];
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'game' | 'creator' | 'quests' | 'inventory' | 'api' | 'scenarios'>('game');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('game');
   const [isMuted, setIsMuted] = useState<boolean>(!soundFX.enabled);
   const [ambientPlaying, setAmbientPlaying] = useState<boolean>(soundFX.ambientEnabled);
   const [savedAvatar, setSavedAvatar] = useState<VisualCharacterConfig>(() => {
@@ -21,7 +32,7 @@ export default function App() {
     return DEFAULT_AVATAR;
   });
 
-  const handleTabChange = (tab: 'game' | 'creator' | 'quests' | 'inventory' | 'api' | 'scenarios') => {
+  const handleTabChange = (tab: ActiveTab) => {
     if (tab === 'quests') {
       soundFX.playPageFlip();
     } else if (tab === 'inventory') {
@@ -58,102 +69,40 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0d0c] text-[#efe6d2] flex flex-col font-serif">
-      {/* Top Header & Mode Switcher */}
-      <header className="sticky top-0 z-40 bg-[#0b0d0ce8] backdrop-blur-md border-b border-[#3a3626] px-4 py-2.5">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#c8161d] to-[#6e0a0e] border border-[#e23a3a] flex items-center justify-center text-lg shadow-md shadow-[#b3141a44]">
-              🐉
-            </div>
-            <div>
-              <span className="font-bold text-base tracking-wide text-[#efe6d2] font-serif">
-                Chronicles AI
-              </span>
-              <span className="hidden md:inline-block ml-2 text-xs text-[#9a927e] font-sans">
-                · Motor de RPG & Animação 2D
-              </span>
-            </div>
-          </div>
+    <div className="app-shell min-h-screen bg-[#0b0d0c] text-[#efe6d2] flex flex-col font-serif">
+      <header className="app-header sticky top-0 z-40 border-b border-[#3a3626] bg-[#0b0d0ce8] px-4 py-2.5 backdrop-blur-md">
+        <div className="app-header-inner mx-auto flex max-w-7xl items-center justify-between gap-3">
+          <a className="app-brand flex items-center gap-2.5" href="/" onClick={(event) => {
+            event.preventDefault();
+            handleTabChange('game');
+          }}>
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#e23a3a] bg-gradient-to-br from-[#c8161d] to-[#6e0a0e] text-xl shadow-md shadow-[#b3141a44]" aria-hidden="true">🐉</span>
+            <span>
+              <span className="block font-serif text-base font-bold tracking-wide text-[#efe6d2]">Chronicles</span>
+              <span className="hidden text-[10px] uppercase tracking-[0.2em] text-[#9a927e] sm:block">Sua lenda começa aqui</span>
+            </span>
+          </a>
 
-          {/* Navigation Switcher */}
-          <div className="flex items-center bg-[#101211] p-1 rounded-xl border border-[#3a3626] gap-1 flex-wrap justify-center">
-            <button
-              onClick={() => handleTabChange('game')}
-              className={`px-3 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === 'game'
-                  ? 'bg-gradient-to-r from-[#e8c46a28] to-[#e8c46a10] text-[#e8c46a] border border-[#e8c46a55] shadow-sm'
-                  : 'text-[#9a927e] hover:text-[#efe6d2] hover:bg-[#17191a]'
-              }`}
-            >
-              <Swords className="w-3.5 h-3.5" />
-              <span>Jogar Jogo</span>
-            </button>
+          <nav className="app-navigation flex items-center gap-1" aria-label="Navegação principal">
+            {navigationItems.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleTabChange(id)}
+                aria-current={activeTab === id ? 'page' : undefined}
+                className={`app-navigation-link flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
+                  activeTab === id
+                    ? 'border border-[#e8c46a55] bg-gradient-to-r from-[#e8c46a28] to-[#e8c46a10] text-[#e8c46a] shadow-sm'
+                    : 'text-[#9a927e] hover:bg-[#17191a] hover:text-[#efe6d2]'
+                }`}
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
 
-            <button
-              onClick={() => handleTabChange('creator')}
-              className={`px-3 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === 'creator'
-                  ? 'bg-gradient-to-r from-[#e8c46a28] to-[#e8c46a10] text-[#e8c46a] border border-[#e8c46a55] shadow-sm'
-                  : 'text-[#9a927e] hover:text-[#efe6d2] hover:bg-[#17191a]'
-              }`}
-            >
-              <Palette className="w-3.5 h-3.5 text-[#e8c46a]" />
-              <span>Criador Visual 2D</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('quests')}
-              className={`px-3 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === 'quests'
-                  ? 'bg-gradient-to-r from-[#e8c46a28] to-[#e8c46a10] text-[#e8c46a] border border-[#e8c46a55] shadow-sm'
-                  : 'text-[#9a927e] hover:text-[#efe6d2] hover:bg-[#17191a]'
-              }`}
-            >
-              <Scroll className="w-3.5 h-3.5 text-[#e8c46a]" />
-              <span>Diário de Missões</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('inventory')}
-              className={`px-3 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === 'inventory'
-                  ? 'bg-gradient-to-r from-[#e8c46a28] to-[#e8c46a10] text-[#e8c46a] border border-[#e8c46a55] shadow-sm'
-                  : 'text-[#9a927e] hover:text-[#efe6d2] hover:bg-[#17191a]'
-              }`}
-            >
-              <Package className="w-3.5 h-3.5 text-[#e8c46a]" />
-              <span>Inventário</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('api')}
-              className={`px-3 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === 'api'
-                  ? 'bg-gradient-to-r from-[#e8c46a28] to-[#e8c46a10] text-[#e8c46a] border border-[#e8c46a55] shadow-sm'
-                  : 'text-[#9a927e] hover:text-[#efe6d2] hover:bg-[#17191a]'
-              }`}
-            >
-              <Code2 className="w-3.5 h-3.5" />
-              <span>API Explorer</span>
-            </button>
-
-            <button
-              onClick={() => handleTabChange('scenarios')}
-              className={`px-3 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition-all flex items-center gap-1.5 ${
-                activeTab === 'scenarios'
-                  ? 'bg-gradient-to-r from-[#e8c46a28] to-[#e8c46a10] text-[#e8c46a] border border-[#e8c46a55] shadow-sm'
-                  : 'text-[#9a927e] hover:text-[#efe6d2] hover:bg-[#17191a]'
-              }`}
-            >
-              <Compass className="w-3.5 h-3.5" />
-              <span>Cenários</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            {/* Audio Soundscape Controls */}
-            <div className="flex items-center bg-[#101211] border border-[#3a3626] rounded-xl p-1 gap-1">
+          <div className="app-audio-controls flex items-center gap-1 rounded-xl border border-[#3a3626] bg-[#101211] p-1">
               <button
                 onClick={toggleAmbientSound}
                 title={ambientPlaying ? "Desativar som ambiente" : "Ativar som ambiente imersivo"}
@@ -176,18 +125,12 @@ export default function App() {
               >
                 {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               </button>
-            </div>
-
-            <div className="hidden lg:flex items-center gap-2 text-xs font-sans text-[#9a927e]">
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span>Gemini Flash</span>
-            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 w-full">
+      <main className="app-main w-full flex-1">
         {activeTab === 'game' && (
           <ForjeSuaLenda
             onOpenApiExplorer={() => handleTabChange('api')}

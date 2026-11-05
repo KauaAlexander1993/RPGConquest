@@ -131,6 +131,7 @@ export interface CreateCampaignRequest {
 export interface TurnRequest {
   campaignId: string;
   action: string;
+  playerMemory?: string;
   customDiceRoll?: {
     roll: number;
     attribute?: keyof CharacterAttributes;

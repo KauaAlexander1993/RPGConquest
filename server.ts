@@ -10,6 +10,12 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 async function startServer() {
+  const { closeCampaignStore, initializeCampaignStore } = await import('./server/database.js');
+  await initializeCampaignStore();
+
+  const { RPGEngine } = await import('./server/rpgEngine.js');
+  await RPGEngine.seedInitialCampaignIfEmpty();
+
   const { rpgRouter } = await import('./server/rpgRouter.js');
 
   const app = express();
@@ -56,9 +62,20 @@ async function startServer() {
     });
   }
 
-  app.listen(Number(PORT), '0.0.0.0', () => {
+  const server = app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`[Chronicles RPG Master Engine] Servidor rodando na porta ${PORT}`);
   });
+
+  const shutdown = () => {
+    server.close(() => {
+      void closeCampaignStore().catch((error: unknown) => {
+        console.error('[Chronicles RPG Master Engine] Erro ao fechar conexão com banco:', error);
+        process.exitCode = 1;
+      });
+    });
+  };
+  process.once('SIGTERM', shutdown);
+  process.once('SIGINT', shutdown);
 }
 
 startServer().catch((err) => {

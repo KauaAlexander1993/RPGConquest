@@ -4,6 +4,7 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  Compass,
   Dice5,
   Heart,
   LoaderCircle,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AnimatedStoryStage2D } from './AnimatedStoryStage2D';
 import { DEFAULT_AVATAR, type VisualCharacterConfig } from './CharacterAvatar2D';
+import { readApiResponse } from '../utils/readApiResponse';
 
 const ACTIVE_CAMPAIGN_KEY = 'forje_active_campaign_id';
 
@@ -90,6 +92,27 @@ interface Campaign {
   }>;
 }
 
+interface TurnResponse {
+  campaign: Campaign;
+  turnResult?: { narrative?: string | null };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isTurnResponse(value: unknown): value is TurnResponse {
+  if (!isRecord(value) || !isRecord(value.campaign)) return false;
+  const campaign = value.campaign;
+  return typeof campaign.id === 'string'
+    && typeof campaign.title === 'string'
+    && typeof campaign.turnCount === 'number'
+    && isRecord(campaign.character)
+    && isRecord(campaign.currentScenario)
+    && Array.isArray(campaign.suggestedActions)
+    && Array.isArray(campaign.history);
+}
+
 interface ForjeSuaLendaProps {
   onOpenApiExplorer?: () => void;
   onOpenVisualCreator?: () => void;
@@ -127,6 +150,83 @@ const modes = [
   { name: 'Caçador de monstros', description: 'Rastreie criaturas e conquiste troféus.', tone: 'tactical' },
   { name: 'Torre infinita', description: 'Suba andares com guardiões e relíquias.', tone: 'tactical' },
 ];
+
+const featuredWorlds = [
+  { worldIndex: 0, category: 'Fantasia', art: 'castle', badge: 'Mais popular' },
+  { worldIndex: 1, category: 'Mistério', art: 'gothic', badge: 'Sombrio' },
+  { worldIndex: 11, category: 'Fantasia', art: 'arcane', badge: 'Magia & mistério' },
+  { worldIndex: 7, category: 'Outros', art: 'eastern', badge: 'Nova jornada' },
+  { worldIndex: 2, category: 'Outros', art: 'cosmic', badge: 'Outro mundo' },
+  { worldIndex: 10, category: 'Outros', art: 'clockwork', badge: 'Aventura' },
+];
+
+const worldCategories = ['Todos', 'Fantasia', 'Mistério', 'Outros'];
+
+type StoryFocus = 'combate' | 'exploração' | 'magia' | 'diplomacia' | 'furtividade';
+
+interface CampaignLearning {
+  preferences: Record<StoryFocus, number>;
+  recentActions: string[];
+  recentConsequences: string[];
+}
+
+const LEARNING_KEY = 'forje_campaign_learning_v1';
+const STORY_FOCI: StoryFocus[] = ['combate', 'exploração', 'magia', 'diplomacia', 'furtividade'];
+
+const emptyLearning = (): CampaignLearning => ({
+  preferences: { combate: 0, exploração: 0, magia: 0, diplomacia: 0, furtividade: 0 },
+  recentActions: [],
+  recentConsequences: [],
+});
+
+const readLearning = (): CampaignLearning => {
+  try {
+    const saved = localStorage.getItem(LEARNING_KEY);
+    if (!saved) return emptyLearning();
+    const parsed = JSON.parse(saved) as Partial<CampaignLearning>;
+    return {
+      preferences: Object.fromEntries(STORY_FOCI.map((focus) => [
+        focus,
+        Math.max(0, Number(parsed.preferences?.[focus]) || 0),
+      ])) as CampaignLearning['preferences'],
+      recentActions: Array.isArray(parsed.recentActions)
+        ? parsed.recentActions.filter((entry): entry is string => typeof entry === 'string').slice(-6)
+        : [],
+      recentConsequences: Array.isArray(parsed.recentConsequences)
+        ? parsed.recentConsequences.filter((entry): entry is string => typeof entry === 'string').slice(-4)
+        : [],
+    };
+  } catch {
+    return emptyLearning();
+  }
+};
+
+const classifyActionFocus = (action: string): StoryFocus => {
+  const normalized = action.toLocaleLowerCase('pt-BR');
+  if (/atac|combate|golpe|luta|defend|arma/.test(normalized)) return 'combate';
+  if (/magia|feiti|runa|conjur|arcano|ritual/.test(normalized)) return 'magia';
+  if (/convers|negoci|persuad|convenc|pergunt|dialog/.test(normalized)) return 'diplomacia';
+  if (/furt|esgueir|escond|silenc|invad/.test(normalized)) return 'furtividade';
+  return 'exploração';
+};
+
+const formatLearning = (learning: CampaignLearning): string => {
+  const mostPlayed = STORY_FOCI
+    .map((focus) => ({ focus, count: learning.preferences[focus] }))
+    .sort((left, right) => right.count - left.count)[0];
+  const preferences = STORY_FOCI
+    .filter((focus) => learning.preferences[focus] > 0)
+    .map((focus) => `${focus} (${learning.preferences[focus]})`)
+    .join(', ');
+  const recentActions = learning.recentActions.slice(-4).join(' | ');
+  const consequences = learning.recentConsequences.slice(-2).join(' | ');
+  return [
+    preferences ? `Preferências observadas: ${preferences}.` : '',
+    mostPlayed?.count ? `Foco mais frequente: ${mostPlayed.focus}.` : '',
+    recentActions ? `Ações recentes: ${recentActions}.` : '',
+    consequences ? `Consequências recentes: ${consequences}.` : '',
+  ].filter(Boolean).join('\n').slice(0, 1200);
+};
 
 const races = [
   { name: 'Humano', detail: 'Versátil e determinado', bonus: { presence: 1 } },
@@ -290,6 +390,8 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
 }) => {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [creationStep, setCreationStep] = useState(0);
+  const [showCampaignCreator, setShowCampaignCreator] = useState(false);
+  const [worldCategory, setWorldCategory] = useState('Todos');
   const [heroName, setHeroName] = useState('');
   const [premise, setPremise] = useState('');
   const [selectedWorld, setSelectedWorld] = useState(0);
@@ -301,13 +403,40 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
   const [allocation, setAllocation] = useState<Record<AttributeName, number>>(emptyAllocation);
   const [action, setAction] = useState('');
   const [busy, setBusy] = useState(false);
+  const [streamingNarrative, setStreamingNarrative] = useState('');
   const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState('');
   const [diceOpen, setDiceOpen] = useState(false);
   const [diceAttribute, setDiceAttribute] = useState<AttributeName>('agility');
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceStyle, setVoiceStyle] = useState<'feminina' | 'masculina'>(() => {
+    try {
+      return localStorage.getItem('forje_voice_style') === 'masculina' ? 'masculina' : 'feminina';
+    } catch {
+      return 'feminina';
+    }
+  });
+  const [voiceURI, setVoiceURI] = useState(() => {
+    try {
+      return localStorage.getItem('forje_voice_uri') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [speechVoices, setSpeechVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [avatar, setAvatar] = useState<VisualCharacterConfig>(DEFAULT_AVATAR);
+  const [learning, setLearning] = useState<CampaignLearning>(readLearning);
   const latestEntryRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    const updateVoices = () => {
+      setSpeechVoices(window.speechSynthesis.getVoices().filter((voice) => voice.lang.toLocaleLowerCase().startsWith('pt')));
+    };
+    updateVoices();
+    window.speechSynthesis.addEventListener('voiceschanged', updateVoices);
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', updateVoices);
+  }, []);
 
   useEffect(() => {
     try {
@@ -333,11 +462,8 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
       }
       try {
         const response = await fetch(`/api/rpg/campaign/${encodeURIComponent(campaignId)}`);
-        const data = await response.json();
-        if (!response.ok) {
-          if (response.status === 404) localStorage.removeItem(ACTIVE_CAMPAIGN_KEY);
-          throw new Error(data.error || 'Não foi possível recuperar a campanha salva.');
-        }
+        if (response.status === 404) localStorage.removeItem(ACTIVE_CAMPAIGN_KEY);
+        const data = await readApiResponse<{ campaign: Campaign }>(response);
         if (!cancelled) setCampaign(data.campaign);
       } catch (restoreError) {
         if (!cancelled) setError(restoreError instanceof Error ? restoreError.message : 'Falha ao recuperar a campanha salva.');
@@ -408,6 +534,7 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
       return;
     }
     setBusy(true);
+    setStreamingNarrative('');
     setError('');
     const selectedWorldData = worlds[selectedWorld];
     const selectedModeData = modes[selectedMode];
@@ -431,8 +558,7 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
           },
         }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Não foi possível iniciar a campanha.');
+      const data = await readApiResponse<{ campaign: Campaign }>(response);
       setCampaign(data.campaign);
       localStorage.setItem(ACTIVE_CAMPAIGN_KEY, data.campaign.id);
     } catch (requestError) {
@@ -448,23 +574,97 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
     setError('');
     setAction('');
     setDiceOpen(false);
+    const nextLearning = readLearning();
+    const actionFocus = classifyActionFocus(playerAction);
+    nextLearning.preferences[actionFocus] += 1;
+    nextLearning.recentActions = [...nextLearning.recentActions, playerAction.trim().slice(0, 100)].slice(-6);
+    setLearning(nextLearning);
     window.speechSynthesis?.cancel();
     try {
-      const response = await fetch('/api/rpg/turn', {
+      const response = await fetch('/api/rpg/turn/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           campaignId: campaign.id,
           action: playerAction.trim(),
+          playerMemory: formatLearning(nextLearning),
           ...(diceRoll ? { customDiceRoll: diceRoll } : {}),
         }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'O narrador não conseguiu processar sua ação.');
-      setCampaign(data.campaign);
+      if (!response.ok) {
+        await readApiResponse<never>(response);
+      }
+      if (!response.body) {
+        throw new Error('O navegador não conseguiu abrir o fluxo da narrativa. Tente novamente.');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const completedTurns: TurnResponse[] = [];
+      const handleEvent = (block: string) => {
+        const dataLine = block.split(/\r?\n/).find((line) => line.startsWith('data:'));
+        if (!dataLine) return;
+
+        let payload: unknown;
+        try {
+          payload = JSON.parse(dataLine.slice(5).trim());
+        } catch {
+          throw new Error('O servidor enviou um evento de narrativa inválido.');
+        }
+        if (!isRecord(payload) || typeof payload.event !== 'string') {
+          throw new Error('O servidor enviou um evento de narrativa incompleto.');
+        }
+        if (payload.event === 'narrative') {
+          const eventData = payload.data;
+          if (isRecord(eventData) && typeof eventData.text === 'string') {
+            setStreamingNarrative((current) => current + eventData.text);
+          }
+        } else if (payload.event === 'complete' && isTurnResponse(payload.data)) {
+          completedTurns.push(payload.data);
+        } else if (payload.event === 'error') {
+          const message = isRecord(payload.data) && typeof payload.data.error === 'string'
+            ? payload.data.error
+            : 'O narrador não conseguiu concluir este turno.';
+          throw new Error(message);
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        let separator = buffer.indexOf('\n\n');
+        while (separator !== -1) {
+          handleEvent(buffer.slice(0, separator));
+          buffer = buffer.slice(separator + 2);
+          separator = buffer.indexOf('\n\n');
+        }
+        if (done) break;
+      }
+      if (buffer.trim()) handleEvent(buffer);
+      const data = completedTurns.at(-1);
+      if (!data) {
+        throw new Error('O servidor encerrou a narrativa antes de concluir o turno. Tente novamente.');
+      }
+
+      const consequence = String(data.turnResult?.narrative || '').trim().replace(/\s+/g, ' ').slice(0, 180);
+      if (consequence) {
+        nextLearning.recentConsequences = [...nextLearning.recentConsequences, consequence].slice(-4);
+        setLearning(nextLearning);
+        try {
+          localStorage.setItem(LEARNING_KEY, JSON.stringify(nextLearning));
+        } catch {
+          setError('A aventura continuou, mas não foi possível salvar as preferências de jogo neste navegador.');
+        }
+      }
+      setCampaign({
+        ...data.campaign,
+        history: [...campaign.history, ...data.campaign.history],
+      });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Falha ao conectar com o narrador.');
     } finally {
+      setStreamingNarrative('');
       setBusy(false);
     }
   };
@@ -473,6 +673,7 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
     localStorage.removeItem(ACTIVE_CAMPAIGN_KEY);
     setCampaign(null);
     setCreationStep(0);
+    setShowCampaignCreator(false);
     setAllocation(emptyAllocation());
     setError('');
     window.speechSynthesis?.cancel();
@@ -489,7 +690,13 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
     if (!latestNarrative || !('speechSynthesis' in window)) return;
     const utterance = new SpeechSynthesisUtterance(latestNarrative);
     utterance.lang = 'pt-BR';
+    utterance.pitch = voiceStyle === 'feminina' ? 1.08 : 0.88;
+    utterance.rate = voiceStyle === 'feminina' ? 0.96 : 0.92;
+    utterance.voice = speechVoices.find((voice) => voice.voiceURI === voiceURI)
+      || speechVoices[0]
+      || null;
     utterance.onend = () => setVoiceEnabled(false);
+    utterance.onerror = () => setVoiceEnabled(false);
     window.speechSynthesis.speak(utterance);
     setVoiceEnabled(true);
   };
@@ -498,13 +705,121 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
     return <div className="mx-auto w-full max-w-2xl px-4 py-8 text-sm text-[#9a927e]" role="status">Recuperando sua aventura...</div>;
   }
 
+  if (!campaign && !showCampaignCreator) {
+    const visibleWorlds = featuredWorlds.filter((featured) => (
+      worldCategory === 'Todos' || featured.category === worldCategory
+    ));
+    const openCreator = (worldIndex?: number) => {
+      if (worldIndex !== undefined) setSelectedWorld(worldIndex);
+      setCreationStep(0);
+      setShowCampaignCreator(true);
+    };
+
+    return (
+      <div className="game-home mx-auto w-full max-w-7xl px-4 pb-12 pt-4 sm:px-6 lg:px-8">
+        <section className="game-home-hero relative isolate flex min-h-[420px] items-end overflow-hidden rounded-[1.75rem] border border-[#665735]/70 px-6 pb-8 pt-24 shadow-2xl sm:min-h-[490px] sm:px-10 sm:pb-10 lg:px-14">
+          <div className="hero-ruins" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="hero-moon" aria-hidden="true" />
+          <div className="hero-stars" aria-hidden="true">✦　 ·　 ✧　　·　　 ✦　 ·　 ✧</div>
+          <div className="relative z-10 max-w-2xl">
+            <p className="cz mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.3em] text-[#f0cf83] sm:text-xs">
+              <Sparkles className="h-4 w-4" aria-hidden="true" /> Uma aventura só sua
+            </p>
+            <h1 className="cz max-w-xl text-4xl font-bold leading-[1.1] text-[#fff3d4] drop-shadow-lg sm:text-6xl">
+              Sua lenda começa <span className="text-[#e8c46a]">aqui.</span>
+            </h1>
+            <p className="mt-4 max-w-lg text-sm leading-relaxed text-[#e2d7bd] sm:text-lg">
+              Escolha um mundo, crie seu herói e descubra para onde cada decisão vai levar você.
+            </p>
+            <button type="button" onClick={() => openCreator()} className="game-primary-button mt-7 inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-7 py-3 text-sm font-bold uppercase tracking-wider text-white transition hover:brightness-110 sm:text-base">
+              Começar aventura <Compass className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <p className="mt-3 text-xs text-[#b8aa8a]">Grátis para começar · Sem caminhos predeterminados</p>
+          </div>
+          <div className="hero-seal" aria-hidden="true">✦</div>
+        </section>
+
+        <section className="mt-9 sm:mt-12" aria-labelledby="featured-worlds-title">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="cz text-[10px] uppercase tracking-[0.25em] text-[#a88b4c]">Encontre seu destino</p>
+              <h2 id="featured-worlds-title" className="cz mt-1 text-2xl font-bold text-[#fff3d4] sm:text-3xl">Explore os mundos</h2>
+            </div>
+            <button type="button" onClick={() => openCreator()} className="hidden items-center gap-1 text-sm font-semibold text-[#e8c46a] transition hover:text-[#fff3d4] sm:inline-flex">
+              Criar minha própria história <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="world-category-list mb-5 flex gap-2 overflow-x-auto pb-2" aria-label="Filtrar mundos">
+            {worldCategories.map((category) => (
+              <button
+                key={category}
+                type="button"
+                aria-pressed={worldCategory === category}
+                onClick={() => setWorldCategory(category)}
+                className={`world-category-chip shrink-0 rounded-full border px-5 py-2.5 text-sm font-semibold transition ${
+                  worldCategory === category
+                    ? 'border-[#a51b1d] bg-gradient-to-b from-[#c51c20] to-[#760d11] text-[#fff3d4] shadow-[0_4px_18px_#8f111544]'
+                    : 'border-white/10 bg-white/[0.06] text-[#b9b19f] hover:border-[#8d7749] hover:text-[#fff3d4]'
+                }`}
+              >
+                {category === 'Todos' ? 'Todos os mundos' : category}
+              </button>
+            ))}
+          </div>
+
+          <div className="featured-worlds-grid">
+            {visibleWorlds.map(({ worldIndex, category, art, badge }) => {
+              const world = worlds[worldIndex];
+              return (
+                <button
+                  key={world.name}
+                  type="button"
+                  onClick={() => openCreator(worldIndex)}
+                  className="featured-world-card group overflow-hidden rounded-2xl border border-white/10 bg-[#11110f] text-left transition duration-300 hover:-translate-y-1 hover:border-[#c5a85f]/70 hover:shadow-[0_16px_40px_#0009]"
+                  aria-label={`Começar aventura: ${world.name}`}
+                >
+                  <span className={`campaign-card-art campaign-art-${art}`} aria-hidden="true">
+                    <span className="campaign-art-sparkles">✦　 ·　 ✧　 ·</span>
+                    <span className="campaign-art-icon">{world.icon}</span>
+                    <span className="campaign-art-title">{world.name}</span>
+                    <span className="campaign-art-badge">{badge}</span>
+                  </span>
+                  <span className="block p-4">
+                    <span className="block text-xs uppercase tracking-[0.18em] text-[#a88b4c]">{category}</span>
+                    <span className="mt-1 block font-serif text-lg font-bold text-[#f2ead8]">{world.name}</span>
+                    <span className="mt-1 block text-sm text-[#9a927e]">{world.description}</span>
+                    <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-[#e8c46a]">
+                      Jogar agora <ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" aria-hidden="true" />
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <button type="button" onClick={() => openCreator()} className="game-primary-button mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold uppercase tracking-wider text-white sm:hidden">
+            Criar minha própria história <Sparkles className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </section>
+      </div>
+    );
+  }
+
   if (!campaign) {
     return (
-      <div className="mx-auto w-full max-w-2xl px-4 pb-8 pt-5 text-[#efe6d2]">
-        <form onSubmit={startCampaign} className="overflow-hidden border border-[#3a3626] bg-[#101211]/95 shadow-2xl shadow-black/40">
+      <div className="campaign-creator-shell mx-auto w-full max-w-3xl px-4 pb-8 pt-5 text-[#efe6d2]">
+        <button type="button" onClick={() => setShowCampaignCreator(false)} className="mb-3 inline-flex min-h-10 items-center gap-1 text-sm text-[#b8aa8a] transition hover:text-[#e8c46a]">
+          <ChevronLeft size={17} aria-hidden="true" /> Voltar aos mundos
+        </button>
+        <form onSubmit={startCampaign} className="campaign-creator-form overflow-hidden border border-[#3a3626] bg-[#101211]/95 shadow-2xl shadow-black/40">
           <div className="border-b border-[#3a3626] bg-[radial-gradient(ellipse_at_50%_0%,_#3a251b_0%,_#101211_76%)] px-5 pb-6 pt-7 text-center sm:px-8">
             <p className="cz text-xs uppercase tracking-[0.18em] text-[#e8c46a]">Comece sua jornada</p>
-            <h1 className="cz mt-2 text-3xl font-bold text-[#fff1cb] sm:text-4xl">Forje sua lenda</h1>
+            <h1 className="cz mt-2 text-3xl font-bold text-[#fff1cb] sm:text-4xl">Escolha o início da sua saga</h1>
             <div className="mx-auto mt-4 h-px max-w-xs bg-gradient-to-r from-transparent via-[#e8c46a] to-transparent" />
             <div className="mt-4 flex justify-center gap-2" aria-label={`Etapa ${creationStep + 1} de 3`}>
               {[0, 1, 2].map((step) => <span key={step} className={`h-1 w-12 ${step <= creationStep ? 'bg-[#e8c46a]' : 'bg-[#3a3626]'}`} />)}
@@ -519,7 +834,8 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
                   <h2 className="cz mb-3 text-base text-[#e8c46a]">História</h2>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {modes.map((mode, index) => (
-                      <button key={mode.name} type="button" aria-pressed={selectedMode === index} onClick={() => setSelectedMode(index)} className={`min-h-[82px] border p-3 text-left transition-colors ${selectedMode === index ? 'border-[#e8c46a] bg-[#e8c46a14]' : 'border-[#34312a] bg-[#1d1f1f] hover:border-[#8a7950]'}`}>
+                      <button key={mode.name} type="button" aria-pressed={selectedMode === index} onClick={() => setSelectedMode(index)} className={`creator-mode-card mode-art-${index} min-h-[150px] border p-3 text-left transition-colors sm:min-h-[170px] ${selectedMode === index ? 'border-[#e8c46a] bg-[#e8c46a14]' : 'border-[#34312a] bg-[#1d1f1f] hover:border-[#8a7950]'}`}>
+                        <span className="creator-card-kicker">{mode.tone === 'epic' ? 'Imersivo' : mode.tone === 'tactical' ? 'Estratégico' : mode.tone === 'mysterious' ? 'Investigação' : 'Livre'}</span>
                         <span className={`block text-sm font-bold ${selectedMode === index ? 'text-[#e8c46a]' : 'text-[#efe6d2]'}`}>{mode.name}</span>
                         <span className="mt-1 block text-xs leading-snug text-[#9a927e]">{mode.description}</span>
                       </button>
@@ -531,9 +847,10 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
                   <h2 className="cz mb-3 text-base text-[#e8c46a]">Mundo</h2>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {worlds.map((world, index) => (
-                      <button key={world.name} type="button" aria-pressed={selectedWorld === index} onClick={() => setSelectedWorld(index)} className={`flex min-h-[72px] items-center gap-2 border p-2.5 text-left transition-colors ${selectedWorld === index ? 'border-[#e8c46a] bg-[#e8c46a14]' : 'border-[#34312a] bg-[#1d1f1f] hover:border-[#8a7950]'}`}>
-                        <span className="text-xl" aria-hidden="true">{world.icon}</span>
-                        <span><span className="block text-sm font-semibold text-[#efe6d2]">{world.name}</span><span className="block text-xs text-[#9a927e]">{world.description}</span></span>
+                      <button key={world.name} type="button" aria-pressed={selectedWorld === index} onClick={() => setSelectedWorld(index)} className={`creator-world-card world-art-${index} min-h-[104px] border p-2.5 text-left transition-colors ${selectedWorld === index ? 'border-[#e8c46a] bg-[#e8c46a14]' : 'border-[#34312a] bg-[#1d1f1f] hover:border-[#8a7950]'}`}>
+                        <span className="creator-world-icon" aria-hidden="true">{world.icon}</span>
+                        <span className="block text-sm font-semibold text-[#efe6d2]">{world.name}</span>
+                        <span className="block text-xs text-[#9a927e]">{world.description}</span>
                       </button>
                     ))}
                   </div>
@@ -634,15 +951,57 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
   const scene = sceneFromCampaign(campaign);
   const currentNpc = campaign.currentScenario.currentNPCs[0];
   const customWorldName = campaign.customThemePrompt?.match(/^(.+?)\. Modo de campanha:/)?.[1];
+  const campaignClass = classOptions.find((heroClass) => campaign.character.class
+    .toLocaleLowerCase('pt-BR')
+    .includes(heroClass.name.toLocaleLowerCase('pt-BR')));
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-3 pb-24 pt-4 text-[#efe6d2] sm:px-5 sm:pb-8">
+    <div className="game-campaign mx-auto w-full max-w-5xl px-3 pb-24 pt-4 text-[#efe6d2] sm:px-5 sm:pb-8">
       <header className="mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-[#3a3626] pb-3">
         <div className="min-w-0">
           <p className="cz truncate text-xs uppercase tracking-[0.15em] text-[#e8c46a]">{campaign.title}</p>
           <h1 className="cz mt-1 truncate text-lg font-bold">{campaign.character.name} <span className="font-normal text-[#9a927e]">· {campaign.character.class}</span></h1>
         </div>
         <div className="flex items-center gap-1.5">
+          <details className="story-voice-settings">
+            <summary aria-label="Configurações de voz">Voz</summary>
+            <div className="story-voice-panel">
+              <label>
+                Timbre
+                <select
+                  value={voiceStyle}
+                  onChange={(event) => {
+                    const style = event.target.value as 'feminina' | 'masculina';
+                    setVoiceStyle(style);
+                    try {
+                      localStorage.setItem('forje_voice_style', style);
+                    } catch {}
+                  }}
+                >
+                  <option value="feminina">Feminino</option>
+                  <option value="masculina">Masculino</option>
+                </select>
+              </label>
+              <label>
+                Voz do dispositivo
+                <select
+                  value={voiceURI}
+                  onChange={(event) => {
+                    setVoiceURI(event.target.value);
+                    try {
+                      localStorage.setItem('forje_voice_uri', event.target.value);
+                    } catch {}
+                  }}
+                >
+                  <option value="">Padrão em português</option>
+                  {speechVoices.map((voice) => (
+                    <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} · {voice.lang}</option>
+                  ))}
+                </select>
+              </label>
+              <p>As vozes disponíveis dependem do navegador e do dispositivo.</p>
+            </div>
+          </details>
           <button type="button" onClick={speakLatest} title={voiceEnabled ? 'Parar narração' : 'Ouvir narração'} className="border border-[#3a3626] bg-[#17191a] p-2 text-[#e8c46a] hover:border-[#e8c46a]">{voiceEnabled ? <VolumeX size={17} /> : <Volume2 size={17} />}</button>
           <button type="button" onClick={onOpenQuestJournal} title="Diário de missões" className="border border-[#3a3626] bg-[#17191a] p-2 text-[#c8c0ad] hover:border-[#e8c46a]"><ScrollText size={17} /></button>
           <button type="button" onClick={onOpenInventory} title="Inventário" className="border border-[#3a3626] bg-[#17191a] p-2 text-[#c8c0ad] hover:border-[#e8c46a]"><Backpack size={17} /></button>
@@ -661,6 +1020,17 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
         <div className="border border-[#3a3626] bg-[#17191a] px-3 py-2"><span className="block text-[#9a927e]">Local</span><span className="mt-1 block truncate text-[#efe6d2]">{campaign.currentScenario.name}</span></div>
       </div>
 
+      {campaignClass && (
+        <section className={`campaign-class-feature ${campaignClass.hidden ? 'campaign-class-feature--hidden' : ''}`} aria-label="Habilidade da classe">
+          <div className="campaign-class-feature__icon" aria-hidden="true">{campaignClass.hidden ? '✦' : '➤'}</div>
+          <div>
+            <p className="campaign-class-feature__eyebrow">{campaignClass.hidden ? 'Classe oculta · vantagem especial' : 'Destaque da classe'}</p>
+            <h2>{campaignClass.name}</h2>
+            <p>{campaignClass.advantage || campaignClass.description}</p>
+          </div>
+        </section>
+      )}
+
       <StoryStageBoundary>
         <AnimatedStoryStage2D
           scene={scene}
@@ -673,6 +1043,7 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
       </StoryStageBoundary>
 
       {campaign.narrationMode === 'offline' && <p role="status" className="mb-3 border-l-2 border-amber-500 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">O narrador está em modo de contingência porque o Gemini não respondeu. A aventura continua, mas estas falas não foram geradas pela IA.</p>}
+      {Object.values(learning.preferences).some((count) => count > 0) && <p className="mb-3 text-xs text-[#9a927e]">O mestre está adaptando os próximos ganchos às suas escolhas. Essa memória fica somente neste navegador.</p>}
       {error && <p role="alert" className="mb-3 border-l-2 border-red-500 bg-red-950/30 px-3 py-2 text-sm text-red-200">{error}</p>}
 
       <section className="border border-[#3a3626] bg-[#101211]/95">
@@ -688,8 +1059,13 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
               {entry.diceRollResult && <p className="mt-1 text-xs text-[#9a927e]">D20 {entry.diceRollResult.d20} + {entry.diceRollResult.modifier} ({entry.diceRollResult.attribute}) = {entry.diceRollResult.total} · {entry.diceRollResult.successLevel}</p>}
             </article>
           ))}
+          {streamingNarrative && (
+            <article className="border-l-2 border-[#665735] pl-3" aria-label="Narrativa em andamento">
+              <p className="whitespace-pre-line text-base leading-relaxed text-[#e5ddcb]">{streamingNarrative}</p>
+            </article>
+          )}
           <div ref={latestEntryRef} />
-          {busy && <p className="animate-pulse text-sm text-[#9a927e]">O mestre está narrando...</p>}
+          {busy && !streamingNarrative && <p className="animate-pulse text-sm text-[#9a927e]">O mestre está narrando...</p>}
         </div>
 
         <div className="border-t border-[#3a3626] px-4 py-3 sm:px-5">
@@ -713,7 +1089,18 @@ const ForjeSuaLendaContent: FC<ForjeSuaLendaProps> = ({
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-[#9a927e]">
         <span className="flex items-center gap-1"><Sparkles size={13} /> {campaign.character.inventory.length} item(ns) · {campaign.character.manaOrEnergy}/{campaign.character.maxManaOrEnergy} energia</span>
-        <button type="button" onClick={newAdventure} className="border-b border-[#665735] pb-0.5 hover:text-[#e8c46a]">Começar outra aventura</button>
+        <div className="flex flex-wrap gap-4">
+          {Object.values(learning.preferences).some((count) => count > 0) && <button type="button" onClick={() => {
+            const cleared = emptyLearning();
+            setLearning(cleared);
+            try {
+              localStorage.removeItem(LEARNING_KEY);
+            } catch {
+              setError('Não foi possível limpar a memória local neste navegador.');
+            }
+          }} className="border-b border-[#665735] pb-0.5 hover:text-[#e8c46a]">Limpar memória do mestre</button>}
+          <button type="button" onClick={newAdventure} className="border-b border-[#665735] pb-0.5 hover:text-[#e8c46a]">Começar outra aventura</button>
+        </div>
       </div>
 
       <nav aria-label="Navegação do jogo" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-[#3a3626] bg-[#0a0a0af2] pb-[env(safe-area-inset-bottom)] md:hidden">
