@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { 
   Terminal, 
   Send, 
@@ -111,7 +111,7 @@ const ENDPOINTS: EndpointDoc[] = [
   },
 ];
 
-export const ApiExplorer: React.FC = () => {
+export const ApiExplorer: FC = () => {
   const [selectedEndpoint, setSelectedEndpoint] = useState<EndpointDoc>(ENDPOINTS[0]);
   const [requestBody, setRequestBody] = useState<string>(
     JSON.stringify(ENDPOINTS[0].sampleBody || {}, null, 2)

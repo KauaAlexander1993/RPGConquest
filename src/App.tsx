@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ForjeSuaLenda } from './components/ForjeSuaLenda';
 import { ApiExplorer } from './components/ApiExplorer';
 import { ScenarioGenerator } from './components/ScenarioGenerator';

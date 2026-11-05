@@ -1,4 +1,4 @@
-import React from 'react';
+import { type FC } from 'react';
 
 export interface VisualCharacterConfig {
   skinColor: string;
@@ -96,7 +96,7 @@ interface AvatarProps {
   showShadow?: boolean;
 }
 
-export const CharacterAvatar2D: React.FC<AvatarProps> = ({
+export const CharacterAvatar2D: FC<AvatarProps> = ({
   config,
   size = 180,
   className = '',

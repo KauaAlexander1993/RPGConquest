@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef, type FC } from 'react';
 
 interface ForjeSuaLendaProps {
   onOpenApiExplorer?: () => void;
@@ -7,7 +7,7 @@ interface ForjeSuaLendaProps {
   onOpenInventory?: () => void;
 }
 
-export const ForjeSuaLenda: React.FC<ForjeSuaLendaProps> = ({ 
+export const ForjeSuaLenda: FC<ForjeSuaLendaProps> = ({
   onOpenApiExplorer, 
   onOpenVisualCreator,
   onOpenQuestJournal,

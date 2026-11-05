@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { CharacterAvatar2D, VisualCharacterConfig, DEFAULT_AVATAR } from './CharacterAvatar2D';
 import { Volume2, VolumeX, Swords, Wand2, Shield, Sparkles } from 'lucide-react';
 import { soundFX } from '../utils/soundEffects';
@@ -14,7 +14,7 @@ interface StoryStageProps {
   onActionClick?: (action: string) => void;
 }
 
-export const AnimatedStoryStage2D: React.FC<StoryStageProps> = ({
+export const AnimatedStoryStage2D: FC<StoryStageProps> = ({
   scene = 'floresta',
   worldName = 'Fantasia medieval',
   characterConfig = DEFAULT_AVATAR,
@@ -227,7 +227,7 @@ export const AnimatedStoryStage2D: React.FC<StoryStageProps> = ({
 };
 
 // 2D Monster Sprite Renderer
-const MonsterSprite2D: React.FC<{ type: string }> = ({ type }) => {
+const MonsterSprite2D: FC<{ type: string }> = ({ type }) => {
   const t = type.toLowerCase();
   if (t.includes('dragao') || t.includes('dragão')) {
     return (
@@ -281,7 +281,7 @@ const MonsterSprite2D: React.FC<{ type: string }> = ({ type }) => {
 };
 
 // 2D NPC Sprite Renderer
-const NpcSprite2D: React.FC<{ type: string }> = ({ type }) => {
+const NpcSprite2D: FC<{ type: string }> = ({ type }) => {
   const t = type.toLowerCase();
   const cloakColor = t.includes('sabio') ? '#1e3a8a' : (t.includes('guarda') ? '#475569' : '#854d0e');
   return (
