@@ -24,3 +24,15 @@ Configure these server environment variables in the hosting provider:
 `DATABASE_URL` is mandatory in production. The server will refuse to start without it instead of silently running without persistence. For Render, create a PostgreSQL database and use its connection string as `DATABASE_URL`; prefer the internal connection string when the web service and database are in the same Render region.
 
 Campaigns created before PostgreSQL is configured are not migrated automatically from the old in-memory store.
+
+## Publishing a free demo
+
+The repository includes a Render Blueprint for the web service. Campaigns still need a PostgreSQL database:
+
+1. Create a free PostgreSQL project on [Neon](https://console.neon.tech/).
+2. Copy its pooled connection string (`postgresql://...`) from the Neon dashboard. Keep it private.
+3. In [Render](https://dashboard.render.com/), choose **New → Blueprint**, connect this GitHub repository, and deploy `render.yaml`.
+4. When Render requests `DATABASE_URL` and `GEMINI_API_KEY`, paste the Neon connection string and your Gemini API key. Enter them only in Render's secret environment-variable form; never commit them.
+5. Wait for the health check to pass, then open the `onrender.com` URL shown on the Render service page.
+
+The free Render web service sleeps after 15 minutes without traffic and can take about a minute to wake. Neon Free suspends its database after inactivity, so the first request after a pause may also be slower. Free plans and quotas can change; check each provider's current limits. Upgrade the services if you need always-on, production-grade hosting.
